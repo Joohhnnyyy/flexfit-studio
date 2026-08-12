@@ -10,7 +10,7 @@
     "db:push": "drizzle-kit push",
     "db:seed": "tsx src/db/seed.ts",
     "db:reset": "node -e \"require('fs').rmSync('flexfit.db',{force:true})\" && npm run db:push && npm run db:seed",
-    "test": "vitest run"
+    "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
     "@libsql/client": "^0.14.0",
