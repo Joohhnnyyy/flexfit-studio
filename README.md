@@ -94,5 +94,8 @@ To verify the application behaves correctly post-refactor, you can run through t
 - [ ] **Waitlist Promotion**: (Admin) Create a class with capacity 1. (Member 1) Book the class. (Member 2) Book the class and join the waitlist. (Member 1) Cancel the booking. Verify Member 2 is automatically promoted from the waitlist to booked.
 - [ ] **Reschedule out of a full class**: (Member 1) Reschedule out of a full class to a different class. Verify the freed slot properly promotes the next waitlisted member.
 - [ ] **Corporate Booking**: (Member 3 - Corporate) Book a class using the company credits toggle. Verify the company's credit pool (not personal credits) is charged, and that the cancellation window behaves as 24h instead of 12h.
+- [ ] **Admin Class Edit**: Sign in as an admin (`admin@flexfit.test` / `admin123`). Navigate to the schedule, edit an upcoming class, and verify you can check the assigned trainer's availability before saving.
+- [ ] **Admin Member Directory**: Navigate to the Members page as an admin. Verify you can view the member directory, toggle active status, and update a member's role.
+- [ ] **Member Payment History**: Sign in as a member (`rahul.k@example.com` / `member123`) and navigate to the dashboard to verify your past payment history renders correctly.
 - [ ] **Trainer Availability**: Sign in as a trainer (`arjun@flexfit.test` / `trainer123`). Attempt to set overlapping availability windows and verify the system catches the conflict.
 - [ ] **Admin Reports**: Sign in as an admin (`admin@flexfit.test` / `admin123`) and verify the dashboard stats and revenue charts load without errors.
