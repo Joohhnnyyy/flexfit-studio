@@ -92,7 +92,7 @@ To verify the application behaves correctly post-refactor, you can run through t
 - [ ] **Book a Class**: Navigate to the schedule and book an upcoming class. Verify your credits decrease by 1.
 - [ ] **Cancel a Booking**: Cancel the booking you just made. Verify your credit is refunded.
 - [ ] **Waitlist Promotion**: (Admin) Create a class with capacity 1. (Member 1) Book the class. (Member 2) Book the class and join the waitlist. (Member 1) Cancel the booking. Verify Member 2 is automatically promoted from the waitlist to booked.
-- [ ] **Reschedule out of a full class**: (Member 1) Reschedule out of a full class to a different class. Verify the freed slot properly promotes the next waitlisted member.
+- [ ] **Reschedule out of a full class (API/Test Level)**: Since there is no UI built for reschedules yet, verify this behavior by running the integration test: `pnpm vitest run src/__tests__/reschedules.test.ts`. Verify the test explicitly checks that the freed slot properly promotes the next waitlisted member.
 - [ ] **Corporate Booking**: (Member 3 - Corporate) Book a class using the company credits toggle. Verify the company's credit pool (not personal credits) is charged, and that the cancellation window behaves as 24h instead of 12h.
 - [ ] **Admin Class Edit**: Sign in as an admin (`admin@flexfit.test` / `admin123`). Navigate to the schedule, edit an upcoming class, and verify you can check the assigned trainer's availability before saving.
 - [ ] **Admin Member Directory**: Navigate to the Members page as an admin. Verify you can view the member directory, toggle active status, and update a member's role.
