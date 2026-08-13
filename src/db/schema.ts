@@ -81,6 +81,7 @@ export const bookings = sqliteTable("bookings", {
   userId: integer("user_id")
     .notNull()
     .references(() => users.id),
+  companyId: integer("company_id").references(() => companies.id),
   membershipId: integer("membership_id").references(() => memberships.id),
   status: text("status", {
     enum: ["booked", "cancelled", "attended", "no_show", "waitlisted"],
@@ -201,28 +202,7 @@ export const companyMembers = sqliteTable("company_members", {
     .default(sql`CURRENT_TIMESTAMP`),
 });
 
-export const corporateBookings = sqliteTable("corporate_bookings", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
-  classId: integer("class_id")
-    .notNull()
-    .references(() => classes.id),
-  userId: integer("user_id")
-    .notNull()
-    .references(() => users.id),
-  companyId: integer("company_id")
-    .notNull()
-    .references(() => companies.id),
-  status: text("status", {
-    enum: ["booked", "cancelled", "attended", "no_show", "waitlisted"],
-  })
-    .notNull()
-    .default("booked"),
-  creditsUsed: integer("credits_used").notNull().default(0),
-  bookedAt: text("booked_at")
-    .notNull()
-    .default(sql`CURRENT_TIMESTAMP`),
-  cancelledAt: text("cancelled_at"),
-});
+
 
 export type User = typeof users.$inferSelect;
 export type Session = typeof sessions.$inferSelect;
@@ -236,5 +216,5 @@ export type Notification = typeof notifications.$inferSelect;
 export type TrainerAvailability = typeof trainerAvailability.$inferSelect;
 export type Company = typeof companies.$inferSelect;
 export type CompanyMember = typeof companyMembers.$inferSelect;
-export type CorporateBooking = typeof corporateBookings.$inferSelect;
+
 export type Reschedule = typeof reschedules.$inferSelect;

@@ -3,6 +3,7 @@ import { TRPCError } from "@trpc/server";
 import { desc, eq } from "drizzle-orm";
 import { payments, users, memberships, membershipPlans } from "@/db/schema";
 import { router, protectedProcedure, adminProcedure } from "../trpc";
+import { processRefund } from "../domain/billing/payments";
 
 export const paymentsRouter = router({
   mine: protectedProcedure.query(async ({ ctx }) => {
@@ -89,19 +90,7 @@ export const paymentsRouter = router({
         });
       }
 
-      const updated = await ctx.db
-        .update(payments)
-        .set({ status: "refunded" })
-        .where(eq(payments.id, input.id))
-        .returning()
-        .get();
-
-      if (row.membershipId) {
-        await ctx.db
-          .update(memberships)
-          .set({ status: "cancelled" })
-          .where(eq(memberships.id, row.membershipId));
-      }
+      const updated = await processRefund(ctx.db, row);
 
       return updated;
     }),

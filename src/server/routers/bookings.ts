@@ -1,14 +1,17 @@
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
-import { bookings, classes, memberships, checkins, users } from "@/db/schema";
+import { bookings, classes, memberships, checkins, users, companies, companyMembers } from "@/db/schema";
 import { router, protectedProcedure, staffProcedure } from "../trpc";
+import { processRefund } from "../domain/bookings/refunds";
+import { promoteWaitlist } from "../domain/bookings/waitlist";
 
 /**
  * Members may cancel free of charge up to this many hours before the class
  * starts. Cancelling later still frees the spot but forfeits the credit.
  */
 export const FREE_CANCELLATION_HOURS = 12;
+export const CORPORATE_FREE_CANCELLATION_HOURS = 24;
 
 /** Plans with this many credits are treated as unlimited and never decrement. */
 export const UNLIMITED_CREDITS = 999;
@@ -52,9 +55,11 @@ export const bookingsRouter = router({
           startsAt: classes.startsAt,
           durationMin: classes.durationMin,
           cancelled: classes.cancelled,
+          companyName: companies.name,
         })
         .from(bookings)
         .innerJoin(classes, eq(bookings.classId, classes.id))
+        .leftJoin(companies, eq(bookings.companyId, companies.id))
         .where(eq(bookings.userId, ctx.user.id))
         .orderBy(asc(classes.startsAt));
 
@@ -63,9 +68,37 @@ export const bookingsRouter = router({
         input.includePast ? true : new Date(r.startsAt) >= now,
       );
     }),
+  myBalances: protectedProcedure.query(async ({ ctx }) => {
+    let personal: { creditsRemaining: number; unlimited: boolean } | null = null;
+    let company: { name: string; creditPoolBalance: number } | null = null;
+
+    const activeMembership = await activeMembershipFor(ctx.db, ctx.user.id);
+    if (activeMembership) {
+      personal = {
+        creditsRemaining: activeMembership.creditsRemaining,
+        unlimited: activeMembership.creditsRemaining >= UNLIMITED_CREDITS,
+      };
+    }
+
+    const companyRow = await ctx.db
+      .select({ company: companies })
+      .from(companyMembers)
+      .innerJoin(companies, eq(companyMembers.companyId, companies.id))
+      .where(and(eq(companyMembers.userId, ctx.user.id), eq(companies.active, true)))
+      .get();
+
+    if (companyRow) {
+      company = {
+        name: companyRow.company.name,
+        creditPoolBalance: companyRow.company.creditPoolBalance,
+      };
+    }
+
+    return { personal, company };
+  }),
 
   book: protectedProcedure
-    .input(z.object({ classId: z.number() }))
+    .input(z.object({ classId: z.number(), useCompanyCredits: z.boolean().optional() }))
     .mutation(async ({ ctx, input }) => {
       const cls = await ctx.db
         .select()
@@ -108,20 +141,48 @@ export const bookingsRouter = router({
         });
       }
 
-      const membership = await activeMembershipFor(ctx.db, ctx.user.id);
-      if (!membership) {
-        throw new TRPCError({
-          code: "FORBIDDEN",
-          message: "An active membership is required to book classes.",
-        });
-      }
+      let activeCompany: typeof companies.$inferSelect | undefined;
+      let activeMembership: typeof memberships.$inferSelect | undefined;
+      let unlimited = false;
 
-      const unlimited = membership.creditsRemaining >= UNLIMITED_CREDITS;
-      if (!unlimited && membership.creditsRemaining < cls.creditCost) {
-        throw new TRPCError({
-          code: "FORBIDDEN",
-          message: "Not enough class credits remaining.",
-        });
+      if (input.useCompanyCredits) {
+        const companyRow = await ctx.db
+          .select({ company: companies })
+          .from(companyMembers)
+          .innerJoin(companies, eq(companyMembers.companyId, companies.id))
+          .where(and(eq(companyMembers.userId, ctx.user.id), eq(companies.active, true)))
+          .get();
+
+        if (!companyRow) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "You are not linked to an active company.",
+          });
+        }
+        activeCompany = companyRow.company;
+        
+        if (activeCompany.creditPoolBalance < cls.creditCost) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Your company does not have enough credits.",
+          });
+        }
+      } else {
+        activeMembership = await activeMembershipFor(ctx.db, ctx.user.id);
+        if (!activeMembership) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "An active membership is required to book classes.",
+          });
+        }
+
+        unlimited = activeMembership.creditsRemaining >= UNLIMITED_CREDITS;
+        if (!unlimited && activeMembership.creditsRemaining < cls.creditCost) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Not enough class credits remaining.",
+          });
+        }
       }
 
       const [{ count }] = await ctx.db
@@ -138,18 +199,26 @@ export const bookingsRouter = router({
         .values({
           classId: cls.id,
           userId: ctx.user.id,
-          membershipId: membership.id,
+          membershipId: activeMembership?.id ?? null,
+          companyId: activeCompany?.id ?? null,
           status: isFull ? "waitlisted" : "booked",
           creditsUsed: isFull ? 0 : cls.creditCost,
         })
         .returning()
         .get();
 
-      if (!isFull && !unlimited) {
-        await ctx.db
-          .update(memberships)
-          .set({ creditsRemaining: membership.creditsRemaining - cls.creditCost })
-          .where(eq(memberships.id, membership.id));
+      if (!isFull) {
+        if (activeCompany) {
+          await ctx.db
+            .update(companies)
+            .set({ creditPoolBalance: activeCompany.creditPoolBalance - cls.creditCost })
+            .where(eq(companies.id, activeCompany.id));
+        } else if (!unlimited && activeMembership) {
+          await ctx.db
+            .update(memberships)
+            .set({ creditsRemaining: activeMembership.creditsRemaining - cls.creditCost })
+            .where(eq(memberships.id, activeMembership.id));
+        }
       }
 
       return created;
@@ -185,8 +254,12 @@ export const bookingsRouter = router({
         });
       }
 
+      const cutoff = row.booking.companyId 
+        ? CORPORATE_FREE_CANCELLATION_HOURS 
+        : FREE_CANCELLATION_HOURS;
+
       const refundable =
-        hoursUntil(row.cls.startsAt) >= FREE_CANCELLATION_HOURS &&
+        hoursUntil(row.cls.startsAt) >= cutoff &&
         row.booking.creditsUsed > 0;
 
       await ctx.db
@@ -194,61 +267,13 @@ export const bookingsRouter = router({
         .set({ status: "cancelled", cancelledAt: new Date().toISOString() })
         .where(eq(bookings.id, row.booking.id));
 
-      if (refundable && row.booking.membershipId) {
-        const ms = await ctx.db
-          .select()
-          .from(memberships)
-          .where(eq(memberships.id, row.booking.membershipId))
-          .get();
-
-        if (ms && ms.creditsRemaining < UNLIMITED_CREDITS) {
-          await ctx.db
-            .update(memberships)
-            .set({ creditsRemaining: ms.creditsRemaining + row.booking.creditsUsed })
-            .where(eq(memberships.id, ms.id));
-        }
+      if (refundable) {
+        await processRefund(ctx.db, row.booking);
       }
 
       // Freeing a confirmed spot promotes the member who has waited longest.
       if (row.booking.status === "booked") {
-        const next = await ctx.db
-          .select()
-          .from(bookings)
-          .where(
-            and(
-              eq(bookings.classId, row.cls.id),
-              eq(bookings.status, "waitlisted"),
-            ),
-          )
-          .orderBy(asc(bookings.bookedAt))
-          .get();
-
-        if (next) {
-          await ctx.db
-            .update(bookings)
-            .set({ status: "booked", creditsUsed: row.cls.creditCost })
-            .where(eq(bookings.id, next.id));
-
-          if (next.membershipId) {
-            const ms = await ctx.db
-              .select()
-              .from(memberships)
-              .where(eq(memberships.id, next.membershipId))
-              .get();
-
-            if (ms && ms.creditsRemaining < UNLIMITED_CREDITS) {
-              await ctx.db
-                .update(memberships)
-                .set({
-                  creditsRemaining: Math.max(
-                    0,
-                    ms.creditsRemaining - row.cls.creditCost,
-                  ),
-                })
-                .where(eq(memberships.id, ms.id));
-            }
-          }
-        }
+        await promoteWaitlist(ctx.db, row.cls.id, row.cls.creditCost);
       }
 
       return { ok: true, refunded: refundable };
@@ -303,9 +328,11 @@ export const bookingsRouter = router({
           memberName: users.name,
           memberEmail: users.email,
           bookedAt: bookings.bookedAt,
+          companyName: companies.name,
         })
         .from(bookings)
         .innerJoin(users, eq(bookings.userId, users.id))
+        .leftJoin(companies, eq(bookings.companyId, companies.id))
         .where(eq(bookings.classId, input.classId))
         .orderBy(asc(bookings.bookedAt));
     }),

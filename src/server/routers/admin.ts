@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { and, eq, gte, sql, lte, desc, inArray } from "drizzle-orm";
+import { and, eq, gte, sql, lte, inArray } from "drizzle-orm";
 import {
   users,
   memberships,
@@ -10,6 +10,7 @@ import {
   membershipPlans,
 } from "@/db/schema";
 import { router, adminProcedure } from "../trpc";
+import { getRevenueByMonth, getRevenueByMethod, getRefundCount } from "../domain/billing/reports";
 
 export const adminRouter = router({
   stats: adminProcedure.query(async ({ ctx }) => {
@@ -87,39 +88,11 @@ export const adminRouter = router({
     }),
 
   revenueByMonth: adminProcedure.query(async ({ ctx }) => {
-    const rows = await ctx.db
-      .select({
-        month: sql<string>`strftime('%Y-%m', ${payments.createdAt})`,
-        totalCents: sql<number>`coalesce(sum(${payments.amountCents}), 0)`,
-      })
-      .from(payments)
-      .where(eq(payments.status, "paid"))
-      .groupBy(sql`strftime('%Y-%m', ${payments.createdAt})`)
-      .orderBy(sql`strftime('%Y-%m', ${payments.createdAt}) DESC`);
-
-    return rows.map((r) => ({
-      month: r.month,
-      totalCents: Number(r.totalCents),
-    }));
+    return getRevenueByMonth(ctx.db);
   }),
 
   revenueByMethod: adminProcedure.query(async ({ ctx }) => {
-    const rows = await ctx.db
-      .select({
-        method: payments.method,
-        totalCents: sql<number>`coalesce(sum(${payments.amountCents}), 0)`,
-        count: sql<number>`count(*)`,
-      })
-      .from(payments)
-      .where(eq(payments.status, "paid"))
-      .groupBy(payments.method)
-      .orderBy(sql`sum(${payments.amountCents}) DESC`);
-
-    return rows.map((r) => ({
-      method: r.method,
-      totalCents: Number(r.totalCents),
-      count: Number(r.count),
-    }));
+    return getRevenueByMethod(ctx.db);
   }),
 
   expiringMemberships: adminProcedure.query(async ({ ctx }) => {
@@ -152,12 +125,7 @@ export const adminRouter = router({
   }),
 
   refundCount: adminProcedure.query(async ({ ctx }) => {
-    const [result] = await ctx.db
-      .select({ count: sql<number>`count(*)` })
-      .from(payments)
-      .where(eq(payments.status, "refunded"));
-
-    return { count: Number(result.count) };
+    return getRefundCount(ctx.db);
   }),
 
   checkinsPerDay: adminProcedure.query(async ({ ctx }) => {

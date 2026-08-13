@@ -12,6 +12,15 @@ npm install -g pnpm
 
 The database is SQLite and lives in a file. There's no server to install and no account to create.
 
+## Setup
+
+1. `cp .env.example .env.local`
+2. `npm install`
+3. `npm run dev`
+
+### Engineering Standards & Testing
+This repository follows rigorous engineering practices. Before any refactoring, we employ **Characterization Testing** (via Vitest and tRPC callers) to freeze and snapshot the existing backend behavior, creating a golden safety net against regressions.
+
 ## Getting set up
 
 ```bash
@@ -61,6 +70,29 @@ src/
   components/   shared components
   db/           schema, client, seed data
   lib/          helpers
-  server/       tRPC routers
-documents/      empty, for your own notes
+  server/       tRPC routers and domain logic (`domain/`)
+documents/      architecture documentation, behavior inventory, ADRs, etc.
 ```
+
+## Recent Refactoring (Phases A-D)
+
+We recently underwent a comprehensive architectural refactor of the backend to stabilize the system and decouple core business logic from the routing layer.
+
+### What Changed and Why
+- **Domain Extraction & Bug Fixes:** We created a `src/server/domain/` layer to isolate pure business logic (like waitlist promotion, refunds, credit math, and time-conflict detection). This abstraction allowed us to catch and fix hidden bugs—most notably in `reschedules.ts`, where a critical bug was silently failing to trigger waitlist promotions when a user rescheduled out of a full class. By extracting waitlist logic, reschedules now correctly free up slots and promote waitlisted members.
+- **Schema Unification & Flag-Based Parity (`bookings.ts`):** We merged the redundant `corporate-bookings.ts` into `bookings.ts` to unify the client contracts. Instead of maintaining parallel schemas and endpoints for individual vs. corporate bookings, we rely on a single unified schema and introduced a strict `useCompanyCredits` flag. When provided, the server securely validates the user's company session data to authorize the action and applies corporate-specific rules (like a 24-hour free cancellation window instead of 12-hour).
+
+### What Deliberately Didn't Change and Why
+- **Simple CRUD Routers:** Routers like `classes.ts`, `auth.ts`, `plans.ts`, and `notifications.ts` were confirmed as pure CRUD during our behavior trace. They were explicitly left as-is without domain extraction because they already follow the "thin delegator" pattern.
+- **Time-Dependent Logic Structure:** While we identified some deeply-coupled time logic (like checking `new Date()` inline), we did not aggressively refactor it out. We proved it is deterministically testable in our suite using Vitest's `vi.useFakeTimers()`.
+- **Database Checking:** We noticed that the `classesAttended` metric relies on `bookings` with status `"attended"` rather than the actual `checkins` table. We kept this logic intact to preserve existing behavior and documented it as a quirk in `04-known-issues.md`.
+
+### Manual Smoke-Test Checklist
+To verify the application behaves correctly post-refactor, you can run through this manual checklist:
+
+- [ ] **Login**: Sign in as a member (`rahul.k@example.com` / `member123`).
+- [ ] **Book a Class**: Navigate to the schedule and book an upcoming class. Verify your credits decrease by 1.
+- [ ] **Cancel a Booking**: Cancel the booking you just made. Verify your credit is refunded.
+- [ ] **Waitlist Promotion**: (Admin) Create a class with capacity 1. (Member 1) Book the class. (Member 2) Book the class and join the waitlist. (Member 1) Cancel the booking. Verify Member 2 is automatically promoted from the waitlist to booked.
+- [ ] **Trainer Availability**: Sign in as a trainer (`arjun@flexfit.test` / `trainer123`). Attempt to set overlapping availability windows and verify the system catches the conflict.
+- [ ] **Admin Reports**: Sign in as an admin (`admin@flexfit.test` / `admin123`) and verify the dashboard stats and revenue charts load without errors.

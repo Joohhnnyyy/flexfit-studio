@@ -8,7 +8,7 @@ import { paymentsRouter } from "./payments";
 import { adminRouter } from "./admin";
 import { notificationsRouter } from "./notifications";
 import { trainersRouter } from "./trainers";
-import { corporateBookingsRouter } from "./corporate-bookings";
+
 import { adminCompaniesRouter } from "./admin-companies";
 import { reschedulesRouter } from "./reschedules";
 
@@ -19,7 +19,7 @@ export const appRouter = router({
   classes: classesRouter,
   bookings: bookingsRouter,
   reschedules: reschedulesRouter,
-  corporateBookings: corporateBookingsRouter,
+
   payments: paymentsRouter,
   admin: adminRouter,
   adminCompanies: adminCompaniesRouter,

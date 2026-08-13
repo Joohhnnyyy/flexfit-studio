@@ -1,11 +1,11 @@
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
-import { and, eq, desc, sql } from "drizzle-orm";
+import { and, eq, desc } from "drizzle-orm";
 import {
   companies,
   companyMembers,
   users,
-  corporateBookings,
+  bookings,
   classes,
 } from "@/db/schema";
 import { router, adminProcedure } from "../trpc";
@@ -53,19 +53,19 @@ export const adminCompaniesRouter = router({
 
       const recentBookings = await ctx.db
         .select({
-          id: corporateBookings.id,
-          status: corporateBookings.status,
-          creditsUsed: corporateBookings.creditsUsed,
-          bookedAt: corporateBookings.bookedAt,
+          id: bookings.id,
+          status: bookings.status,
+          creditsUsed: bookings.creditsUsed,
+          bookedAt: bookings.bookedAt,
           className: classes.name,
           startsAt: classes.startsAt,
           memberName: users.name,
         })
-        .from(corporateBookings)
-        .innerJoin(classes, eq(corporateBookings.classId, classes.id))
-        .innerJoin(users, eq(corporateBookings.userId, users.id))
-        .where(eq(corporateBookings.companyId, company.id))
-        .orderBy(desc(corporateBookings.bookedAt))
+        .from(bookings)
+        .innerJoin(classes, eq(bookings.classId, classes.id))
+        .innerJoin(users, eq(bookings.userId, users.id))
+        .where(eq(bookings.companyId, company.id))
+        .orderBy(desc(bookings.bookedAt))
         .limit(20);
 
       return {

@@ -15,7 +15,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body>
+      <body suppressHydrationWarning>
         <Providers>
           <NavBar />
           <main className="mx-auto max-w-5xl px-4 py-8">{children}</main>

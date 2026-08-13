@@ -3,41 +3,11 @@ import { TRPCError } from "@trpc/server";
 import { and, desc, eq, like, or, sql } from "drizzle-orm";
 import { users, memberships, membershipPlans, bookings } from "@/db/schema";
 import { router, protectedProcedure, staffProcedure, adminProcedure } from "../trpc";
+import { getMemberProfile } from "../domain/members/profile";
 
 export const membersRouter = router({
   profile: protectedProcedure.query(async ({ ctx }) => {
-    const membership = await ctx.db
-      .select({
-        id: memberships.id,
-        status: memberships.status,
-        startDate: memberships.startDate,
-        endDate: memberships.endDate,
-        creditsRemaining: memberships.creditsRemaining,
-        planName: membershipPlans.name,
-        planCredits: membershipPlans.classCredits,
-      })
-      .from(memberships)
-      .innerJoin(membershipPlans, eq(memberships.planId, membershipPlans.id))
-      .where(eq(memberships.userId, ctx.user.id))
-      .orderBy(desc(memberships.endDate))
-      .get();
-
-    const [{ attended }] = await ctx.db
-      .select({ attended: sql<number>`count(*)` })
-      .from(bookings)
-      .where(
-        and(eq(bookings.userId, ctx.user.id), eq(bookings.status, "attended")),
-      );
-
-    return {
-      id: ctx.user.id,
-      name: ctx.user.name,
-      email: ctx.user.email,
-      phone: ctx.user.phone,
-      role: ctx.user.role,
-      membership: membership ?? null,
-      classesAttended: Number(attended),
-    };
+    return getMemberProfile(ctx.db, ctx.user);
   }),
 
   updateProfile: protectedProcedure
@@ -105,7 +75,7 @@ export const membersRouter = router({
         .where(eq(memberships.userId, user.id))
         .orderBy(desc(memberships.startDate));
 
-      const { passwordHash: _omit, ...safe } = user;
+      const { passwordHash, ...safe } = user;
       return { ...safe, memberships: history };
     }),
 

@@ -5,6 +5,6 @@ export default {
   out: "./drizzle",
   dialect: "turso",
   dbCredentials: {
-    url: "file:flexfit.db",
+    url: process.env.TURSO_DATABASE_URL || "file:flexfit.db",
   },
 } satisfies Config;

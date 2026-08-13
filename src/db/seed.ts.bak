@@ -286,14 +286,11 @@ async function seed() {
     for (let a = 0; a < Math.min(attendeeCount, cls.capacity); a++) {
       const member = members[(ci + a) % members.length];
       const ms = createdMemberships.find((m) => m.userId === member.id);
-      const companyLink = companyMemberLinks.find((cm) => cm.userId === member.id);
-      const useCompany = !!companyLink && a % 2 === 0;
       const isPast = new Date(cls.startsAt) < new Date(daysFromNow(0));
       bookingRows.push({
         classId: cls.id,
         userId: member.id,
-        membershipId: useCompany ? null : (ms?.id ?? null),
-        companyId: useCompany ? companyLink.companyId : null,
+        membershipId: ms?.id ?? null,
         status: isPast
           ? a % 7 === 0
             ? "no_show"

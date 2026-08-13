@@ -2,9 +2,18 @@ import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { eq, and, gte } from "drizzle-orm";
 import { classes, users, trainerAvailability } from "@/db/schema";
-import { router, protectedProcedure } from "../trpc";
+import { router, protectedProcedure, staffProcedure } from "../trpc";
+import { checkTrainerAvailability } from "../domain/trainers/availability";
 
 export const trainersRouter = router({
+  list: staffProcedure.query(async ({ ctx }) => {
+    return ctx.db
+      .select({ id: users.id, name: users.name })
+      .from(users)
+      .where(eq(users.role, "trainer"))
+      .orderBy(users.name);
+  }),
+
   upcomingClasses: protectedProcedure.query(async ({ ctx }) => {
     if (ctx.user.role !== "trainer") {
       throw new TRPCError({
@@ -149,63 +158,6 @@ export const trainersRouter = router({
           message: "Staff only.",
         });
       }
-      const classStart = new Date(input.startsAt);
-      const classEnd = new Date(classStart.getTime() + input.durationMin * 60000);
-
-      const dayOfWeek = classStart.getUTCDay();
-      const startTimeStr = String(classStart.getUTCHours()).padStart(2, "0") +
-        ":" +
-        String(classStart.getUTCMinutes()).padStart(2, "0");
-      const endTimeStr = String(classEnd.getUTCHours()).padStart(2, "0") +
-        ":" +
-        String(classEnd.getUTCMinutes()).padStart(2, "0");
-
-      const availability = await ctx.db
-        .select()
-        .from(trainerAvailability)
-        .where(
-          and(
-            eq(trainerAvailability.trainerId, input.trainerId),
-            eq(trainerAvailability.dayOfWeek, dayOfWeek),
-          ),
-        )
-        .get();
-
-      if (!availability) {
-        return { available: false, reason: "No availability set for this day" };
-      }
-
-      const availStart = availability.startTime;
-      const availEnd = availability.endTime;
-
-      const isWithinAvailability =
-        startTimeStr >= availStart && endTimeStr <= availEnd;
-
-      if (!isWithinAvailability) {
-        return { available: false, reason: "Outside availability hours" };
-      }
-
-      const conflictingClasses = await ctx.db
-        .select()
-        .from(classes)
-        .where(
-          and(
-            eq(classes.trainerId, input.trainerId),
-            eq(classes.cancelled, false),
-          ),
-        );
-
-      for (const cls of conflictingClasses) {
-        const existStart = new Date(cls.startsAt);
-        const existEnd = new Date(
-          existStart.getTime() + cls.durationMin * 60000,
-        );
-
-        if (classStart < existEnd && classEnd > existStart) {
-          return { available: false, reason: "Trainer already has a class at this time" };
-        }
-      }
-
-      return { available: true };
+      return checkTrainerAvailability(ctx.db, input);
     }),
 });

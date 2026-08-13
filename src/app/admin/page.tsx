@@ -28,6 +28,12 @@ export default function AdminPage() {
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold tracking-tight">Admin</h1>
         <div className="flex gap-2">
+          <Link href="/admin/members" className="btn btn-sm">
+            Member Directory
+          </Link>
+          <Link href="/admin/classes" className="btn btn-sm">
+            Manage Schedule
+          </Link>
           <Link href="/admin/companies" className="btn btn-sm">
             Corporate Memberships
           </Link>

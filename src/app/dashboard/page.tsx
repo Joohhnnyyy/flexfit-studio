@@ -26,6 +26,7 @@ export default function DashboardPage() {
   });
   const { data: bookings } = trpc.bookings.mine.useQuery({ includePast: false });
   const { data: rescheduleHistory } = trpc.reschedules.history.useQuery();
+  const { data: payments } = trpc.payments.mine.useQuery();
 
   const cancel = trpc.bookings.cancel.useMutation({
     onSuccess: async () => {
@@ -164,6 +165,40 @@ export default function DashboardPage() {
                   <p className="muted text-xs mt-1">
                     Rescheduled {formatDate(r.rescheduledAt)}
                   </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {payments && payments.length > 0 && (
+        <section className="space-y-3">
+          <h2 className="font-medium">Payment history</h2>
+          <div className="space-y-2">
+            {payments.map((p) => (
+              <div key={p.id} className="panel flex items-center justify-between p-4 text-sm">
+                <div>
+                  <div className="font-medium flex items-center gap-2">
+                    ${(p.amountCents / 100).toFixed(2)}
+                    {p.status === "refunded" && (
+                      <span className="rounded px-1.5 py-0.5 text-xs bg-[#451a1a] text-[#f87171]">
+                        Refunded
+                      </span>
+                    )}
+                    {p.status === "pending" && (
+                      <span className="rounded px-1.5 py-0.5 text-xs bg-[#3a2a1a] text-[#fbbf24]">
+                        Pending
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-xs muted mt-1">
+                    {p.planName || "Add-on"} &middot; {p.method}
+                  </div>
+                </div>
+                <div className="text-right muted text-xs">
+                  {formatDate(p.createdAt)}
+                  <div className="mt-1 font-mono uppercase">{p.reference || "N/A"}</div>
                 </div>
               </div>
             ))}
