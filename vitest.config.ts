@@ -7,5 +7,6 @@ export default defineConfig({
       "@": path.resolve(__dirname, "./src"),
     },
     fileParallelism: false,
+    exclude: ["node_modules", "dist", ".idea", ".git", ".cache", ".agents/**"],
   },
 });
